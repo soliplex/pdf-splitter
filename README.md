@@ -3,7 +3,7 @@
 [![CI](https://github.com/soliplex/pdf-splitter/actions/workflows/soliplex.yaml/badge.svg)](https://github.com/soliplex/pdf-splitter/actions/workflows/soliplex.yaml)
 [![codecov](https://codecov.io/gh/soliplex/pdf-splitter/branch/main/graph/badge.svg)](https://codecov.io/gh/soliplex/pdf-splitter)
 
-Split-Process-Merge pipeline for converting large PDFs to Docling documents.
+Split-Process-Merge pipeline for converting large PDFs to Docling documents. This pipeline is useful for projects like soliplex that might need to break large PDF files apart before processing.
 
 ## Installation
 
