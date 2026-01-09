@@ -70,9 +70,8 @@ merged.export_to_json("output.json")
 ## Development
 
 ```bash
-make help       # show commands
-make test       # run tests
-make lint       # run ruff
-make typecheck  # run mypy
-make quality    # all checks
+uv run pytest       # run tests
+uv run ruff check   # run ruff
+uv run mypy src/    # run mypy
+
 ```
