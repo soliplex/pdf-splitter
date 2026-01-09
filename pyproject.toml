@@ -1,0 +1,136 @@
+[build-system]
+requires = ["uv_build>=0.9.5,<0.10.0"]
+build-backend = "uv_build"
+
+
+[project]
+name = "pdf-splitter"
+version = "0.4.0"
+description = "A scalable PDF splitting framework for parallel document processing using Docling"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+authors = [{ name = "Enfold Systems", email = "info@enfoldsystems.net" }]
+keywords = ["pdf", "docling", "document-processing", "parallel-processing"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Text Processing :: General",
+]
+dependencies = [
+    "docling>=1.16.0",
+    "pypdf>=4.0.0",
+]
+
+
+profiling = [
+    "memory-profiler>=0.61.0",
+]
+
+[project.scripts]
+pdf-splitter = "pdf_splitter.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/soliplex/pdf-splitter"
+Documentation = "https://github.com/soliplex/pdf-splitter#readme"
+Repository = "https://github.com/soliplex/pdf-splitter"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pdf_splitter"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:docling_core.*",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "F",      # pyflakes
+    "W",      # pycodestyle warnings
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "SIM",    # flake8-simplify
+    "RUF",    # ruff-specific rules
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "SIM108", # use ternary operator (can reduce readability)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+    "B011",   # assert False
+    "B017",   # assertRaises(Exception)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint.isort]
+force-single-line = true
+
+[tool.ruff.lint.flake8-pytest-style]
+parametrize-names-type = "csv"
+
+
+# Coverage configuration
+[tool.coverage.run]
+source = ["pdf_splitter"]
+branch = true
+omit = ["*/tests/*", "*/__init__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
+# Baseline: 64% (Dec 2025). Target: 80%
+# Main gaps: cli.py (50%), logging_config.py (20%), segmentation_enhanced.py (55%)
+fail_under = 20
+show_missing = true
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+# Type checking configuration
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+exclude = ["tests/", "build/", "lib/"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "pytest-mock>=3.15.1",
+    "mypy>=1.13.0",
+    "pre-commit>=4.0.0",
+    "ruff>=0.14.9",
+]
