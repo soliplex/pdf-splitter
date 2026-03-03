@@ -10,7 +10,9 @@ from typing import cast
 
 from pypdf import PdfReader
 
-from pdf_splitter.segmentation import get_page_coverage, get_split_boundaries, split_pdf
+from pdf_splitter.segmentation import get_page_coverage
+from pdf_splitter.segmentation import get_split_boundaries
+from pdf_splitter.segmentation import split_pdf
 
 
 def analyze_pdf(pdf_path: Path) -> dict:

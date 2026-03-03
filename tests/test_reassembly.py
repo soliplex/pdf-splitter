@@ -5,7 +5,8 @@ Tests document concatenation, page number monotonicity,
 and proper handling of provenance data.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import pytest
 
@@ -108,8 +109,10 @@ class TestMergeFromResults:
 
         merge_from_results(results)
 
-        # Should only process successful result
-        mock_doc_class.model_validate.assert_called_once_with({"test": "data"})
+        # Should only process successful result (name is set on the master dict)
+        mock_doc_class.model_validate.assert_called_once_with(
+            {"test": "data", "name": "merged_document"}
+        )
 
     @patch("pdf_splitter.reassembly.DoclingDocument")
     def test_merge_from_results_all_failed_returns_none(self, mock_doc_class):

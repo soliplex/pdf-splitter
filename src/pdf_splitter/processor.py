@@ -10,11 +10,18 @@ in the correct process space.
 """
 
 import logging
+import multiprocessing
 import os
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import as_completed
 from pathlib import Path
 from typing import Any
+
+# Use spawn to avoid copying the parent's multi-GB address space via fork.
+# All worker functions are self-contained (import inside worker, primitive args)
+# so spawn is safe and avoids COW overhead + fork-safety issues in threaded hosts.
+_spawn_context = multiprocessing.get_context("spawn")
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +67,10 @@ def _process_chunk(chunk_path: str, verbose: bool = False) -> dict[str, Any]:
     # Import inside worker to ensure proper process isolation
     from docling.backend.docling_parse_v2_backend import DoclingParseV2DocumentBackend
     from docling.datamodel.base_models import InputFormat
-    from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode
-    from docling.document_converter import DocumentConverter, PdfFormatOption
+    from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.datamodel.pipeline_options import TableFormerMode
+    from docling.document_converter import DocumentConverter
+    from docling.document_converter import PdfFormatOption
 
     try:
         # Create converter with image extraction enabled
@@ -106,6 +115,9 @@ def _process_chunk(chunk_path: str, verbose: bool = False) -> dict[str, Any]:
             "error": str(e),
             "proc_time": proc_time,
         }
+    finally:
+        gc.enable()
+        gc.collect()
 
 
 class BatchProcessor:
@@ -127,8 +139,8 @@ class BatchProcessor:
             maxtasksperchild: Tasks per worker before restart (default 1 for memory isolation)
             verbose: If True, enable INFO logging in workers; if False, WARNING only
         """
-        # Default to 80% of CPUs to leave headroom for other processes
-        self.max_workers = max_workers or max(1, int((os.cpu_count() or 4) * 0.8))
+        # Default to 40% of CPUs (max 2) to limit memory from parallel PDF readers
+        self.max_workers = max_workers or max(1, min(2, int((os.cpu_count() or 4) * 0.4)))
         self.maxtasksperchild = maxtasksperchild
         self.verbose = verbose
 
@@ -159,7 +171,9 @@ class BatchProcessor:
 
         completed_count = 0
         with ProcessPoolExecutor(
-            max_workers=self.max_workers, max_tasks_per_child=self.maxtasksperchild
+            max_workers=self.max_workers,
+            max_tasks_per_child=self.maxtasksperchild,
+            mp_context=_spawn_context,
         ) as executor:
             # Submit all chunks
             future_to_path = {}

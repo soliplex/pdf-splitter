@@ -15,13 +15,13 @@ class TestBatchProcessor:
     """Tests for BatchProcessor class."""
 
     def test_init_default_workers(self):
-        """Test default worker count uses 80% of CPU count."""
+        """Test default worker count uses 40% of CPU count, capped at 2."""
         import os
 
         from pdf_splitter.processor import BatchProcessor
 
         processor = BatchProcessor()
-        expected_workers = max(1, int((os.cpu_count() or 4) * 0.8))
+        expected_workers = max(1, min(2, int((os.cpu_count() or 4) * 0.4)))
         assert processor.max_workers == expected_workers
         assert processor.maxtasksperchild == 1
 

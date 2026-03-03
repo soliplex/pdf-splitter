@@ -97,7 +97,8 @@ class TestSemanticContinuity:
         """
         from pypdf import PdfReader
 
-        from pdf_splitter.segmentation import get_page_coverage, get_split_boundaries
+        from pdf_splitter.segmentation import get_page_coverage
+        from pdf_splitter.segmentation import get_split_boundaries
 
         reader = PdfReader(str(sample_pdf))
         total_pages = len(reader.pages)
@@ -117,9 +118,9 @@ class TestSemanticContinuity:
                 next_start = boundaries[i + 1][0]
 
                 # With overlap, next chunk should start before current ends
-                assert (
-                    next_start < current_end or next_start == current_end
-                ), f"Chunks {i} and {i + 1} should have overlap or be contiguous"
+                assert next_start < current_end or next_start == current_end, (
+                    f"Chunks {i} and {i + 1} should have overlap or be contiguous"
+                )
 
 
 @pytest.mark.integration
@@ -180,7 +181,8 @@ class TestProvenanceMonotonicity:
         Fail Condition: Sequence resets indicate concatenation failure.
         """
         from pdf_splitter.processor import BatchProcessor
-        from pdf_splitter.reassembly import merge_from_results, validate_provenance_monotonicity
+        from pdf_splitter.reassembly import merge_from_results
+        from pdf_splitter.reassembly import validate_provenance_monotonicity
         from pdf_splitter.segmentation import split_pdf
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -226,8 +228,11 @@ class TestEndToEndPipeline:
         from pypdf import PdfReader
 
         from pdf_splitter.processor import BatchProcessor
-        from pdf_splitter.reassembly import get_merge_statistics, merge_from_results
-        from pdf_splitter.segmentation import get_page_coverage, get_split_boundaries, split_pdf
+        from pdf_splitter.reassembly import get_merge_statistics
+        from pdf_splitter.reassembly import merge_from_results
+        from pdf_splitter.segmentation import get_page_coverage
+        from pdf_splitter.segmentation import get_split_boundaries
+        from pdf_splitter.segmentation import split_pdf
 
         with tempfile.TemporaryDirectory() as tmpdir:
             output_dir = Path(tmpdir)
@@ -261,9 +266,9 @@ class TestEndToEndPipeline:
                     print(f"Merge statistics: {stats}")
 
                     # V-04: Check page coverage in provenance
-                    assert (
-                        stats["unique_pages"] > 0 or stats["total_items"] == 0
-                    ), "V-04: Processed document should have page provenance"
+                    assert stats["unique_pages"] > 0 or stats["total_items"] == 0, (
+                        "V-04: Processed document should have page provenance"
+                    )
 
 
 @pytest.mark.integration

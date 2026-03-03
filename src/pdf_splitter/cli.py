@@ -20,7 +20,8 @@ from pdf_splitter.logging_config import setup_logging
 
 def cmd_analyze(args):
     """Analyze a PDF and show splitting recommendations."""
-    from pdf_splitter.segmentation_enhanced import analyze_document_structure, smart_split
+    from pdf_splitter.segmentation_enhanced import analyze_document_structure
+    from pdf_splitter.segmentation_enhanced import smart_split
 
     pdf_path = Path(args.pdf)
     if not pdf_path.exists():
@@ -255,11 +256,9 @@ def cmd_compare(args):
     from pypdf import PdfReader
 
     from pdf_splitter.segmentation import get_split_boundaries
-    from pdf_splitter.segmentation_enhanced import (
-        get_split_boundaries_enhanced,
-        get_split_boundaries_hybrid,
-        smart_split,
-    )
+    from pdf_splitter.segmentation_enhanced import get_split_boundaries_enhanced
+    from pdf_splitter.segmentation_enhanced import get_split_boundaries_hybrid
+    from pdf_splitter.segmentation_enhanced import smart_split
 
     pdf_path = Path(args.pdf)
     if not pdf_path.exists():

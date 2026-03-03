@@ -7,7 +7,8 @@ and properly handles bookmarks and fallback splitting.
 
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import pytest
 
@@ -197,7 +198,8 @@ class TestSplitPdf:
         """Test that split preserves all pages."""
         from pypdf import PdfReader
 
-        from pdf_splitter.segmentation import get_page_coverage, get_split_boundaries
+        from pdf_splitter.segmentation import get_page_coverage
+        from pdf_splitter.segmentation import get_split_boundaries
 
         boundaries = get_split_boundaries(sample_pdf, chunk_size=3, overlap=1)
         total_pages = len(PdfReader(str(sample_pdf)).pages)

@@ -11,7 +11,6 @@ This preserves:
 - All reference integrity
 """
 
-import copy
 import logging
 import re
 from typing import Any
@@ -137,12 +136,106 @@ def _offset_provenance(item: dict[str, Any], page_offset: int) -> dict[str, Any]
     return item
 
 
+def _merge_one_document(
+    master: dict[str, Any], doc: dict[str, Any], doc_idx: int, total: int
+) -> None:
+    """
+    Merge a single document dict into master in-place.
+
+    Items are remapped in-place (no deep copy) since the source doc
+    is discarded after this call. Only small structures (child refs,
+    page metadata) are copied to avoid aliasing issues.
+
+    Args:
+        master: The accumulating master document dict (modified in place)
+        doc: The source document dict to merge (will be consumed)
+        doc_idx: 1-based index for logging
+        total: Total document count for logging
+    """
+    logger.debug(f"Concatenating document {doc_idx}/{total}")
+
+    # Calculate current offsets based on master's collection sizes
+    offsets = {
+        "texts": len(master.get("texts", [])),
+        "tables": len(master.get("tables", [])),
+        "pictures": len(master.get("pictures", [])),
+        "groups": len(master.get("groups", [])),
+        "key_value_items": len(master.get("key_value_items", [])),
+        "form_items": len(master.get("form_items", [])),
+    }
+
+    # Calculate page offset (max page number in master)
+    page_offset = 0
+    if master.get("pages"):
+        page_offset = max(int(k) for k in master["pages"])
+
+    logger.debug(
+        f"  Offsets: page={page_offset}, texts={offsets['texts']}, "
+        f"tables={offsets['tables']}, pictures={offsets['pictures']}"
+    )
+
+    # Process and append items from each collection — remap in-place
+    for collection in ITEM_COLLECTIONS:
+        if collection not in doc or not doc[collection]:
+            continue
+
+        if collection not in master:
+            master[collection] = []
+
+        for item in doc[collection]:
+            _remap_item_refs(item, offsets)
+            _offset_provenance(item, page_offset)
+            master[collection].append(item)
+
+        # Clear source collection to free memory as we go
+        doc[collection] = []
+
+    # Merge body.children (small dicts, copy to avoid aliasing)
+    if "body" in doc and "children" in doc["body"]:
+        if "body" not in master:
+            master["body"] = {"self_ref": "#/body", "children": []}
+        if "children" not in master["body"]:
+            master["body"]["children"] = []
+
+        for child_ref in doc["body"]["children"]:
+            new_ref = _remap_ref_dict(child_ref, offsets)
+            master["body"]["children"].append(new_ref)
+
+    # Merge furniture.children
+    if "furniture" in doc and "children" in doc["furniture"]:
+        if "furniture" not in master:
+            master["furniture"] = {"self_ref": "#/furniture", "children": []}
+        if "children" not in master["furniture"]:
+            master["furniture"]["children"] = []
+
+        for child_ref in doc["furniture"]["children"]:
+            new_ref = _remap_ref_dict(child_ref, offsets)
+            master["furniture"]["children"].append(new_ref)
+
+    # Merge pages with offset keys (page dicts are small, safe to move)
+    if doc.get("pages"):
+        if "pages" not in master:
+            master["pages"] = {}
+
+        for page_key, page_data in doc["pages"].items():
+            new_key = str(int(page_key) + page_offset)
+            if "page_no" in page_data:
+                page_data["page_no"] = int(page_key) + page_offset
+            master["pages"][new_key] = page_data
+
+    logger.info(f"Merged document {doc_idx}/{total}")
+
+
 def concatenate_documents(docs: list[dict[str, Any]]) -> dict[str, Any] | None:
     """
     Concatenate multiple DoclingDocument dicts into a single document.
 
     This is a custom implementation that works around bugs in
     docling-core's DoclingDocument.concatenate() method.
+
+    Items from source documents are remapped in-place and moved into
+    the master to avoid expensive deep copies. Source documents should
+    not be used after this call.
 
     Args:
         docs: List of DoclingDocument dicts (from export_to_dict())
@@ -155,93 +248,17 @@ def concatenate_documents(docs: list[dict[str, Any]]) -> dict[str, Any] | None:
         return None
 
     if len(docs) == 1:
-        return copy.deepcopy(docs[0])
+        return docs[0]
 
-    # Initialize master from deep copy of first document
-    master = copy.deepcopy(docs[0])
+    # Initialize master from first document (take ownership, no copy needed)
+    master = docs[0]
     master["name"] = "merged_document"
+    total = len(docs)
 
-    logger.info(f"Starting concatenation with document 1/{len(docs)}")
+    logger.info(f"Starting concatenation with document 1/{total}")
 
     for doc_idx, doc in enumerate(docs[1:], start=2):
-        logger.debug(f"Concatenating document {doc_idx}/{len(docs)}")
-
-        # Calculate current offsets based on master's collection sizes
-        offsets = {
-            "texts": len(master.get("texts", [])),
-            "tables": len(master.get("tables", [])),
-            "pictures": len(master.get("pictures", [])),
-            "groups": len(master.get("groups", [])),
-            "key_value_items": len(master.get("key_value_items", [])),
-            "form_items": len(master.get("form_items", [])),
-        }
-
-        # Calculate page offset (max page number in master)
-        page_offset = 0
-        if master.get("pages"):
-            page_offset = max(int(k) for k in master["pages"])
-
-        logger.debug(
-            f"  Offsets: page={page_offset}, texts={offsets['texts']}, "
-            f"tables={offsets['tables']}, pictures={offsets['pictures']}"
-        )
-
-        # Process and append items from each collection
-        for collection in ITEM_COLLECTIONS:
-            if collection not in doc or not doc[collection]:
-                continue
-
-            if collection not in master:
-                master[collection] = []
-
-            for item in doc[collection]:
-                # Deep copy to avoid modifying original
-                new_item = copy.deepcopy(item)
-
-                # Remap all references
-                _remap_item_refs(new_item, offsets)
-
-                # Offset provenance page numbers
-                _offset_provenance(new_item, page_offset)
-
-                master[collection].append(new_item)
-
-        # Merge body.children
-        if "body" in doc and "children" in doc["body"]:
-            if "body" not in master:
-                master["body"] = {"self_ref": "#/body", "children": []}
-            if "children" not in master["body"]:
-                master["body"]["children"] = []
-
-            for child_ref in doc["body"]["children"]:
-                new_ref = _remap_ref_dict(copy.deepcopy(child_ref), offsets)
-                master["body"]["children"].append(new_ref)
-
-        # Merge furniture.children
-        if "furniture" in doc and "children" in doc["furniture"]:
-            if "furniture" not in master:
-                master["furniture"] = {"self_ref": "#/furniture", "children": []}
-            if "children" not in master["furniture"]:
-                master["furniture"]["children"] = []
-
-            for child_ref in doc["furniture"]["children"]:
-                new_ref = _remap_ref_dict(copy.deepcopy(child_ref), offsets)
-                master["furniture"]["children"].append(new_ref)
-
-        # Merge pages with offset keys
-        if doc.get("pages"):
-            if "pages" not in master:
-                master["pages"] = {}
-
-            for page_key, page_data in doc["pages"].items():
-                new_key = str(int(page_key) + page_offset)
-                new_page = copy.deepcopy(page_data)
-                # Update page_no in the page data itself
-                if "page_no" in new_page:
-                    new_page["page_no"] = int(page_key) + page_offset
-                master["pages"][new_key] = new_page
-
-        logger.info(f"Merged document {doc_idx}/{len(docs)}")
+        _merge_one_document(master, doc, doc_idx, total)
 
     # Log final statistics
     logger.info(
@@ -298,8 +315,10 @@ def merge_from_results(results: list[dict[str, Any]]) -> DoclingDocument | None:
     """
     Merge processor results directly into a single DoclingDocument.
 
-    Uses custom concatenation on the raw dicts for efficiency
-    (avoids double serialization through DoclingDocument objects).
+    Processes results one at a time in a streaming fashion — each result's
+    document_dict is merged into the master and then discarded to keep
+    memory usage proportional to the final document size rather than the
+    sum of all inputs.
 
     Args:
         results: List of result dicts from BatchProcessor.execute_parallel()
@@ -308,7 +327,15 @@ def merge_from_results(results: list[dict[str, Any]]) -> DoclingDocument | None:
     Returns:
         Merged DoclingDocument, or None if no valid documents
     """
-    doc_dicts = []
+    master = None
+    valid_count = 0
+    total_valid = sum(1 for r in results if r.get("success") and r.get("document_dict") is not None)
+
+    if total_valid == 0:
+        logger.error("No valid documents to merge")
+        return None
+
+    logger.info(f"Merging {total_valid} valid documents from {len(results)} results (streaming)")
 
     for i, result in enumerate(results):
         if not result.get("success"):
@@ -320,23 +347,34 @@ def merge_from_results(results: list[dict[str, Any]]) -> DoclingDocument | None:
             logger.warning(f"Chunk {i} has no document data")
             continue
 
-        doc_dicts.append(doc_dict)
+        valid_count += 1
 
-    if not doc_dicts:
-        logger.error("No valid documents to merge")
+        if master is None:
+            # First valid document becomes the master
+            master = doc_dict
+            master["name"] = "merged_document"
+            logger.info(f"Starting concatenation with document 1/{total_valid}")
+        else:
+            _merge_one_document(master, doc_dict, valid_count, total_valid)
+            del doc_dict
+
+        # Clear the result's reference to free the dict
+        result["document_dict"] = None
+
+    if master is None:
         return None
 
-    logger.info(f"Merging {len(doc_dicts)} valid documents from {len(results)} results")
-
-    # Use custom concatenation directly on dicts
-    merged_dict = concatenate_documents(doc_dicts)
-
-    if merged_dict is None:
-        return None
+    # Log final statistics
+    logger.info(
+        f"Concatenation complete: {len(master.get('pages', {}))} pages, "
+        f"{len(master.get('texts', []))} texts, "
+        f"{len(master.get('tables', []))} tables, "
+        f"{len(master.get('pictures', []))} pictures"
+    )
 
     # Validate and return as DoclingDocument
     try:
-        return DoclingDocument.model_validate(merged_dict)
+        return DoclingDocument.model_validate(master)
     except Exception as e:
         logger.error(f"Failed to validate merged document: {e}")
         raise
