@@ -10,7 +10,8 @@ import logging
 import tempfile
 from pathlib import Path
 
-from pypdf import PdfReader, PdfWriter
+from pypdf import PdfReader
+from pypdf import PdfWriter
 
 logger = logging.getLogger(__name__)
 

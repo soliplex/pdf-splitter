@@ -27,9 +27,9 @@ class TestConfigFactory:
         from pdf_splitter.config_factory import get_pipeline_options
 
         opts = get_pipeline_options()
-        assert (
-            opts.table_structure_options.mode == TableFormerMode.FAST
-        ), "Table mode should be FAST for 2x speedup"
+        assert opts.table_structure_options.mode == TableFormerMode.FAST, (
+            "Table mode should be FAST for 2x speedup"
+        )
 
     def test_pipeline_options_images_disabled(self):
         """Test that image generation is disabled to prevent OOM."""
@@ -62,9 +62,9 @@ class TestConfigFactory:
         pdf_option = format_options[InputFormat.PDF]
         from docling.backend.docling_parse_v2_backend import DoclingParseV2DocumentBackend
 
-        assert (
-            pdf_option.backend == DoclingParseV2DocumentBackend
-        ), "Should use V2 backend for 10x faster loading"
+        assert pdf_option.backend == DoclingParseV2DocumentBackend, (
+            "Should use V2 backend for 10x faster loading"
+        )
 
     @patch("pdf_splitter.config_factory.DocumentConverter")
     def test_create_converter_pipeline_options(self, mock_converter_class):
@@ -81,7 +81,7 @@ class TestConfigFactory:
         pipeline_opts = pdf_option.pipeline_options
 
         assert pipeline_opts.do_ocr is False
-        assert pipeline_opts.table_structure_options.mode == TableFormerMode.FAST
+        assert pipeline_opts.table_structure_options.mode == TableFormerMode.ACCURATE
         assert pipeline_opts.generate_page_images is False
         assert pipeline_opts.generate_picture_images is False
 

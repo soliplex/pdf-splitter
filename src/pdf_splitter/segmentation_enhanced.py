@@ -10,14 +10,20 @@ Provides smarter PDF splitting with:
 """
 
 import logging
+import multiprocessing
 import os
 import tempfile
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from pypdf import PdfReader, PdfWriter
+# Use spawn to avoid copying the parent's multi-GB address space via fork.
+_spawn_context = multiprocessing.get_context("spawn")
+
+from pypdf import PdfReader  # noqa: E402
+from pypdf import PdfWriter  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -276,6 +282,9 @@ def _write_single_chunk(
 
     except Exception as e:
         return (idx, None, str(e))
+    finally:
+        gc.enable()
+        gc.collect()
 
 
 def smart_split_to_files(
@@ -325,9 +334,9 @@ def smart_split_to_files(
 
     total_chunks = len(result.boundaries)
 
-    # Determine worker count (default 80% of CPUs to leave headroom)
+    # Determine worker count (default 40% of CPUs to limit memory from parallel PDF readers)
     if max_workers is None:
-        default_workers = max(1, int((os.cpu_count() or 4) * 0.8))
+        default_workers = max(1, min(2, int((os.cpu_count() or 4) * 0.4)))
         max_workers = min(default_workers, total_chunks)
 
     if parallel and total_chunks > 1:
@@ -365,7 +374,7 @@ def _write_chunks_parallel(
     pdf_path_str = str(pdf_path)
     output_dir_str = str(output_dir)
 
-    executor = ProcessPoolExecutor(max_workers=max_workers)
+    executor = ProcessPoolExecutor(max_workers=max_workers, mp_context=_spawn_context)
     try:
         # Submit all chunk writes
         futures = {}
@@ -409,15 +418,25 @@ def _write_chunks_parallel(
 def _write_chunks_sequential(
     pdf_path: Path, boundaries: list[tuple[int, int]], output_dir: Path, total_chunks: int
 ) -> list[Path]:
-    """Write chunks sequentially (original behavior)."""
+    """Write chunks sequentially, reloading PdfReader periodically to clear internal caches."""
+    import gc
+
     logger.debug(f"Sequential chunk writing: {total_chunks} chunks")
 
+    reader_reload_interval = 5
     reader = PdfReader(str(pdf_path))
     chunk_paths = []
 
     logger.debug(f"Writing {total_chunks} chunks sequentially")
 
     for idx, (start, end) in enumerate(boundaries):
+        # Reload reader periodically to release accumulated internal caches
+        if idx > 0 and idx % reader_reload_interval == 0:
+            del reader
+            gc.collect()
+            reader = PdfReader(str(pdf_path))
+            logger.debug(f"Reloaded PdfReader at chunk {idx + 1} to release cached pages")
+
         writer = PdfWriter()
         num_pages = end - start
 
@@ -438,9 +457,11 @@ def _write_chunks_sequential(
             writer.write(f)
 
         chunk_paths.append(chunk_path)
+        del writer
         logger.debug(f"[COMPLETE] Chunk {idx + 1}/{total_chunks}: {chunk_filename}")
         logger.debug(f"Wrote chunk {idx + 1}/{total_chunks}: {chunk_filename}")
 
+    del reader
     return chunk_paths
 
 
@@ -995,7 +1016,8 @@ def get_split_boundaries_with_docling_toc(
     import re
     import tempfile
 
-    from pypdf import PdfReader, PdfWriter
+    from pypdf import PdfReader
+    from pypdf import PdfWriter
 
     from pdf_splitter.config_factory import create_converter
 
