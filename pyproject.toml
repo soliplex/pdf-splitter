@@ -5,7 +5,7 @@ build-backend = "uv_build"
 
 [project]
 name = "pdf-splitter"
-version = "0.4.1"
+version = "0.4.2"
 description = "A scalable PDF splitting framework for parallel document processing using Docling"
 readme = "README.md"
 license = { text = "MIT" }
@@ -132,5 +132,5 @@ dev = [
     "pytest-mock>=3.15.1",
     "mypy>=1.13.0",
     "pre-commit>=4.0.0",
-    "ruff>=0.14.9",
+    "ruff>=0.15.7 ,<0.16.0",
 ]

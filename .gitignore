@@ -169,3 +169,4 @@ cython_debug/
 /*.db
 /db
 /haiku.db
+/.claude

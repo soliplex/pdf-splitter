@@ -227,6 +227,75 @@ class BatchProcessor:
         valid_results: list[dict[str, Any]] = [r for r in results if r is not None]
         return valid_results
 
+    def execute_parallel_streaming(
+        self,
+        chunk_paths: list[Path],
+        on_result: Any = None,
+    ) -> list[dict[str, Any]]:
+        """
+        Process chunks in parallel, invoking *on_result* as each completes.
+
+        Unlike :meth:`execute_parallel`, the callback receives each result
+        immediately and the ``document_dict`` is cleared right after so
+        that at most ``max_workers + 1`` payloads are in memory at once.
+
+        Args:
+            chunk_paths: List of paths to PDF chunk files.
+            on_result: ``(idx: int, result: dict) -> None`` called for
+                each completed chunk **in completion order**.  The caller
+                can merge/persist the document_dict here; it will be set
+                to ``None`` immediately afterwards.
+
+        Returns:
+            Result list in input order (document_dict already nulled).
+        """
+        if not chunk_paths:
+            return []
+
+        chunk_str_paths = [str(p) for p in chunk_paths]
+        results: list[dict[str, Any] | None] = [None] * len(chunk_paths)
+        path_to_idx = {p: i for i, p in enumerate(chunk_str_paths)}
+
+        logger.debug(
+            f"Streaming parallel processing: max_workers={self.max_workers}, "
+            f"maxtasksperchild={self.maxtasksperchild}, chunks={len(chunk_paths)}"
+        )
+
+        with ProcessPoolExecutor(
+            max_workers=self.max_workers,
+            max_tasks_per_child=self.maxtasksperchild,
+            mp_context=_spawn_context,
+        ) as executor:
+            future_to_path = {}
+            for path in chunk_str_paths:
+                future = executor.submit(_process_chunk, path, self.verbose)
+                future_to_path[future] = path
+
+            for future in as_completed(future_to_path):
+                path = future_to_path[future]
+                idx = path_to_idx[path]
+
+                try:
+                    result = future.result()
+                except Exception as e:
+                    result = {
+                        "success": False,
+                        "chunk_path": path,
+                        "document_dict": None,
+                        "error": str(e),
+                    }
+
+                results[idx] = result
+
+                if on_result is not None:
+                    on_result(idx, result)
+
+                # Free the heavy payload immediately
+                result["document_dict"] = None
+
+        valid_results: list[dict[str, Any]] = [r for r in results if r is not None]
+        return valid_results
+
     def execute_sequential(self, chunk_paths: list[Path]) -> list[dict[str, Any]]:
         """
         Process chunks sequentially (useful for debugging or memory testing).
