@@ -9,6 +9,7 @@ Provides smarter PDF splitting with:
 5. Unified smart_split() that auto-selects the best strategy
 """
 
+import contextlib
 import logging
 import multiprocessing
 import os
@@ -119,7 +120,13 @@ def smart_split(
     # Select strategy
     if force_strategy:
         boundaries, strategy = _apply_forced_strategy(
-            pdf_path, total_pages, force_strategy, max_chunk_pages, min_chunk_pages, overlap
+            pdf_path,
+            reader,
+            total_pages,
+            force_strategy,
+            max_chunk_pages,
+            min_chunk_pages,
+            overlap,
         )
     else:
         boundaries, strategy = _auto_select_strategy(
@@ -144,6 +151,7 @@ def smart_split(
 
 def _apply_forced_strategy(
     pdf_path: Path,
+    reader: PdfReader,
     total_pages: int,
     strategy: str,
     max_chunk_pages: int,
@@ -155,9 +163,20 @@ def _apply_forced_strategy(
     if strategy == "fixed":
         return _get_fixed_boundaries(total_pages, max_chunk_pages, overlap), "fixed"
     elif strategy == "hybrid":
-        return get_split_boundaries_hybrid(pdf_path, max_chunk_pages, min_chunk_pages, overlap)
+        return get_split_boundaries_hybrid(
+            pdf_path,
+            max_chunk_pages,
+            min_chunk_pages,
+            overlap,
+            _reader=reader,
+        )
     elif strategy == "enhanced":
-        return get_split_boundaries_enhanced(pdf_path, max_chunk_pages, overlap)
+        return get_split_boundaries_enhanced(
+            pdf_path,
+            max_chunk_pages,
+            overlap,
+            _reader=reader,
+        )
     else:
         raise ValueError(f"Unknown strategy: {strategy}")
 
@@ -207,7 +226,12 @@ def _auto_select_strategy(
         # Use hybrid strategy for documents with chapter structure
         logger.debug("Trying hybrid strategy for chapter-based document")
         boundaries, strategy = get_split_boundaries_hybrid(
-            pdf_path, max_chunk_pages, min_chunk_pages, overlap
+            pdf_path,
+            max_chunk_pages,
+            min_chunk_pages,
+            overlap,
+            _reader=reader,
+            _bookmarks=all_bookmarks,
         )
         if _is_balanced(boundaries, total_pages, MAX_CHUNK_RATIO):
             logger.info(f"Selected hybrid strategy: {strategy} ({len(boundaries)} chunks)")
@@ -217,7 +241,12 @@ def _auto_select_strategy(
     # Try enhanced strategy
     logger.debug("Trying enhanced bookmark strategy")
     boundaries, strategy = get_split_boundaries_enhanced(
-        pdf_path, max_chunk_pages, overlap, max_chunk_ratio=MAX_CHUNK_RATIO
+        pdf_path,
+        max_chunk_pages,
+        overlap,
+        max_chunk_ratio=MAX_CHUNK_RATIO,
+        _reader=reader,
+        _bookmarks=all_bookmarks,
     )
 
     if _is_balanced(boundaries, total_pages, MAX_CHUNK_RATIO):
@@ -283,6 +312,10 @@ def _write_single_chunk(
     except Exception as e:
         return (idx, None, str(e))
     finally:
+        # Explicitly delete heavy objects before GC so the collect
+        # can actually reclaim them (matters in sequential mode).
+        with contextlib.suppress(NameError):
+            del writer, reader
         gc.enable()
         gc.collect()
 
@@ -423,7 +456,9 @@ def _write_chunks_sequential(
 
     logger.debug(f"Sequential chunk writing: {total_chunks} chunks")
 
-    reader_reload_interval = 5
+    # Reload every 3 chunks to limit cached page accumulation.
+    # At 100 pages/chunk, 3 chunks = ~300 decoded pages before reset.
+    reader_reload_interval = 3
     reader = PdfReader(str(pdf_path))
     chunk_paths = []
 
@@ -458,7 +493,7 @@ def _write_chunks_sequential(
 
         chunk_paths.append(chunk_path)
         del writer
-        logger.debug(f"[COMPLETE] Chunk {idx + 1}/{total_chunks}: {chunk_filename}")
+        gc.collect()
         logger.debug(f"Wrote chunk {idx + 1}/{total_chunks}: {chunk_filename}")
 
     del reader
@@ -471,6 +506,9 @@ def get_split_boundaries_enhanced(
     overlap: int = DEFAULT_OVERLAP,
     target_level: int | None = None,
     max_chunk_ratio: float = MAX_CHUNK_RATIO,
+    *,
+    _reader: PdfReader | None = None,
+    _bookmarks: list[tuple[int, int, str]] | None = None,
 ) -> tuple[list[tuple[int, int]], str]:
     """
     Enhanced split boundary detection with multiple strategies.
@@ -481,11 +519,13 @@ def get_split_boundaries_enhanced(
         overlap: Overlap pages between chunks
         target_level: Specific bookmark depth to use (None = auto-detect)
         max_chunk_ratio: Maximum fraction of document for any single chunk
+        _reader: Reuse an existing PdfReader (avoids re-opening the file)
+        _bookmarks: Reuse already-collected bookmarks list
 
     Returns:
         Tuple of (boundaries, strategy_used)
     """
-    reader = PdfReader(str(pdf_path))
+    reader = _reader or PdfReader(str(pdf_path))
     total_pages = len(reader.pages)
     logger.debug(f"Enhanced strategy: analyzing {total_pages} pages")
 
@@ -499,7 +539,12 @@ def get_split_boundaries_enhanced(
     # Try deep bookmark extraction
     if reader.outline:
         logger.debug("Document has outline, attempting deep bookmark extraction")
-        boundaries, level_used = _get_deep_bookmark_boundaries(reader, total_pages, target_level)
+        boundaries, level_used = _get_deep_bookmark_boundaries(
+            reader,
+            total_pages,
+            target_level,
+            _bookmarks=_bookmarks,
+        )
 
         if boundaries and _is_balanced(boundaries, total_pages, max_chunk_ratio):
             logger.info(f"Using bookmark level {level_used}: {len(boundaries)} balanced chunks")
@@ -525,16 +570,23 @@ def get_split_boundaries_enhanced(
 
 
 def _get_deep_bookmark_boundaries(
-    reader: PdfReader, total_pages: int, target_level: int | None = None
+    reader: PdfReader,
+    total_pages: int,
+    target_level: int | None = None,
+    *,
+    _bookmarks: list[tuple[int, int, str]] | None = None,
 ) -> tuple[list[tuple[int, int]], int]:
     """
     Extract boundaries by traversing bookmark tree deeply.
 
     Finds the optimal level that provides meaningful chapter/section splits.
     """
-    # Collect all bookmarks with their levels
-    all_bookmarks: list[tuple[int, int, str]] = []
-    _collect_bookmarks_recursive(reader, reader.outline, all_bookmarks, level=0)
+    # Collect all bookmarks with their levels (reuse if already collected)
+    if _bookmarks is not None:
+        all_bookmarks = _bookmarks
+    else:
+        all_bookmarks = []
+        _collect_bookmarks_recursive(reader, reader.outline, all_bookmarks, level=0)
     logger.debug(f"Deep bookmark scan: found {len(all_bookmarks)} total bookmarks")
 
     if not all_bookmarks:
@@ -781,6 +833,9 @@ def get_split_boundaries_hybrid(
     max_chunk_pages: int = 100,
     min_chunk_pages: int = 10,
     overlap: int = DEFAULT_OVERLAP,
+    *,
+    _reader: PdfReader | None = None,
+    _bookmarks: list[tuple[int, int, str]] | None = None,
 ) -> tuple[list[tuple[int, int]], str]:
     """
     Hybrid approach: Use chapter boundaries and subdivide large chapters.
@@ -797,11 +852,13 @@ def get_split_boundaries_hybrid(
         max_chunk_pages: Maximum pages per chunk before subdividing
         min_chunk_pages: Minimum pages (smaller chunks get merged)
         overlap: Overlap between chunks
+        _reader: Reuse an existing PdfReader (avoids re-opening the file)
+        _bookmarks: Reuse already-collected bookmarks list
 
     Returns:
         Tuple of (boundaries, strategy_description)
     """
-    reader = PdfReader(str(pdf_path))
+    reader = _reader or PdfReader(str(pdf_path))
     total_pages = len(reader.pages)
     logger.debug(f"Hybrid strategy: analyzing {total_pages} pages")
 
@@ -812,10 +869,13 @@ def get_split_boundaries_hybrid(
         logger.debug(f"Document fits in single chunk ({total_pages} <= {max_chunk_pages})")
         return [(0, total_pages)], "single_chunk"
 
-    # Collect all bookmarks
-    all_bookmarks: list[tuple[int, int, str]] = []
-    if reader.outline:
-        _collect_bookmarks_recursive(reader, reader.outline, all_bookmarks, level=0)
+    # Collect all bookmarks (reuse if already collected)
+    if _bookmarks is not None:
+        all_bookmarks = _bookmarks
+    else:
+        all_bookmarks = []
+        if reader.outline:
+            _collect_bookmarks_recursive(reader, reader.outline, all_bookmarks, level=0)
     logger.debug(f"Collected {len(all_bookmarks)} bookmarks for hybrid analysis")
 
     # Group by level

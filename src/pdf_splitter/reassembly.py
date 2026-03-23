@@ -294,18 +294,29 @@ def merge_documents(docs: list[DoclingDocument]) -> DoclingDocument | None:
     if len(docs) == 1:
         return docs[0]
 
-    # Convert DoclingDocuments to dicts for custom concatenation
-    doc_dicts = [doc.export_to_dict() for doc in docs]
+    total = len(docs)
+    # Stream: convert and merge one document at a time so only the
+    # master dict + one source dict exist in memory concurrently.
+    master = docs[0].export_to_dict()
+    master["name"] = "merged_document"
 
-    # Use custom concatenation
-    merged_dict = concatenate_documents(doc_dicts)
+    logger.info(f"Starting concatenation with document 1/{total}")
 
-    if merged_dict is None:
-        return None
+    for doc_idx, doc in enumerate(docs[1:], start=2):
+        doc_dict = doc.export_to_dict()
+        _merge_one_document(master, doc_dict, doc_idx, total)
+        del doc_dict
+
+    logger.info(
+        f"Concatenation complete: {len(master.get('pages', {}))} pages, "
+        f"{len(master.get('texts', []))} texts, "
+        f"{len(master.get('tables', []))} tables, "
+        f"{len(master.get('pictures', []))} pictures"
+    )
 
     # Reconstruct DoclingDocument from merged dict
     try:
-        return DoclingDocument.model_validate(merged_dict)
+        return DoclingDocument.model_validate(master)
     except Exception as e:
         logger.error(f"Failed to validate merged document: {e}")
         raise
