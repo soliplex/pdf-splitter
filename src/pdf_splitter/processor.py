@@ -65,7 +65,7 @@ def _process_chunk(chunk_path: str, verbose: bool = False) -> dict[str, Any]:
 
     logger.info(f"start processing chunk {chunk_path} pid={os.getpid()}")
     # Import inside worker to ensure proper process isolation
-    from docling.backend.docling_parse_v2_backend import DoclingParseV2DocumentBackend
+    from docling.backend.docling_parse_backend import DoclingParseDocumentBackend
     from docling.datamodel.base_models import InputFormat
     from docling.datamodel.pipeline_options import PdfPipelineOptions
     from docling.datamodel.pipeline_options import TableFormerMode
@@ -83,7 +83,7 @@ def _process_chunk(chunk_path: str, verbose: bool = False) -> dict[str, Any]:
         converter = DocumentConverter(
             format_options={
                 InputFormat.PDF: PdfFormatOption(
-                    pipeline_options=pipeline_opts, backend=DoclingParseV2DocumentBackend
+                    pipeline_options=pipeline_opts, backend=DoclingParseDocumentBackend
                 )
             }
         )

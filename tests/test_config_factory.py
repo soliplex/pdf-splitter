@@ -41,7 +41,7 @@ class TestConfigFactory:
 
     @patch("pdf_splitter.config_factory.DocumentConverter")
     def test_create_converter_uses_v2_backend(self, mock_converter_class):
-        """Test that create_converter uses DoclingParseV2DocumentBackend."""
+        """Test that create_converter uses DoclingParseDocumentBackend."""
         from docling.datamodel.base_models import InputFormat
 
         from pdf_splitter.config_factory import create_converter
@@ -58,11 +58,11 @@ class TestConfigFactory:
         format_options = call_kwargs["format_options"]
         assert InputFormat.PDF in format_options
 
-        # Check that the backend is DoclingParseV2DocumentBackend
+        # Check that the backend is DoclingParseDocumentBackend
         pdf_option = format_options[InputFormat.PDF]
-        from docling.backend.docling_parse_v2_backend import DoclingParseV2DocumentBackend
+        from docling.backend.docling_parse_backend import DoclingParseDocumentBackend
 
-        assert pdf_option.backend == DoclingParseV2DocumentBackend, (
+        assert pdf_option.backend == DoclingParseDocumentBackend, (
             "Should use V2 backend for 10x faster loading"
         )
 

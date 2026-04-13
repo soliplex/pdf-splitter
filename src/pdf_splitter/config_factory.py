@@ -11,7 +11,7 @@ Optimizations:
 - Image generation disabled: Prevents OOM risk
 """
 
-from docling.backend.docling_parse_v2_backend import DoclingParseV2DocumentBackend
+from docling.backend.docling_parse_backend import DoclingParseDocumentBackend
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.datamodel.pipeline_options import TableFormerMode
@@ -28,7 +28,7 @@ def create_converter() -> DocumentConverter:
     - TableFormerMode.FAST: Faster table extraction (2x speedup)
     - generate_page_images=False: Prevents massive RAM overhead
     - generate_picture_images=False: Prevents OOM risk
-    - DoclingParseV2DocumentBackend: High-performance C++ binding (10x faster)
+    - DoclingParseDocumentBackend: High-performance C++ binding (10x faster)
 
     Returns:
         DocumentConverter: Configured converter instance
@@ -42,7 +42,7 @@ def create_converter() -> DocumentConverter:
     return DocumentConverter(
         format_options={
             InputFormat.PDF: PdfFormatOption(
-                pipeline_options=pipeline_opts, backend=DoclingParseV2DocumentBackend
+                pipeline_options=pipeline_opts, backend=DoclingParseDocumentBackend
             )
         }
     )
