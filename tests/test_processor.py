@@ -85,7 +85,7 @@ class TestWorkerFunction:
 
         # Check that imports are inside the function
         assert "from docling.document_converter import DocumentConverter" in source
-        assert "from docling.backend.docling_parse_v2_backend" in source
+        assert "from docling.backend.docling_parse_backend" in source
 
     # TODO: Can't patch imports inside worker function - they're imported at runtime
     # def test_process_chunk_returns_correct_structure(self):

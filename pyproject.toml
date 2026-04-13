@@ -1,5 +1,5 @@
 [build-system]
-requires = ["uv_build>=0.9.5,<0.11.0"]
+requires = ["uv_build>=0.9.5,<0.12.0"]
 build-backend = "uv_build"
 
 
@@ -24,7 +24,7 @@ classifiers = [
     "Topic :: Text Processing :: General",
 ]
 dependencies = [
-    "docling>=2.64.0",
+    "docling>=2.70.0",
     "pypdf>=6.6.0",
 ]
 
@@ -55,6 +55,8 @@ markers = [
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:docling_core.*",
+    # docling internally accesses its own deprecated fields; nothing we can fix
+    "ignore::DeprecationWarning:docling.*",
 ]
 
 [tool.ruff]
@@ -113,6 +115,11 @@ exclude_lines = [
 # Main gaps: cli.py (50%), logging_config.py (20%), segmentation_enhanced.py (55%)
 fail_under = 20
 show_missing = true
+
+[tool.uv]
+# 1-week cooldown: don't resolve packages newer than this date.
+# Update periodically. haiku-rag-slim is exempt (see sources).
+exclude-newer = "1 weeks"
 
 [tool.coverage.html]
 directory = "htmlcov"
