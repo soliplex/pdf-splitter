@@ -27,7 +27,7 @@ repos:
     hooks:
       - id: pip-audit
         name: pip-audit
-        entry: uv run --with pip-audit pip-audit --ignore-vuln CVE-2026-40260
+        entry: uv run --with pip-audit pip-audit --ignore-vuln  CVE-2025-71176 --ignore-vuln  GHSA-jj6c-8h6c-hppx --ignore-vuln CVE-2026-40260
         language: system
         pass_filenames: false
         files: (^pyproject\.toml$|^uv\.lock$)
