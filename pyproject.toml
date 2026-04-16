@@ -5,7 +5,7 @@ build-backend = "uv_build"
 
 [project]
 name = "pdf-splitter"
-version = "0.4.2"
+version = "0.5.0"
 description = "A scalable PDF splitting framework for parallel document processing using Docling"
 readme = "README.md"
 license = { text = "MIT" }
@@ -15,7 +15,6 @@ keywords = ["pdf", "docling", "document-processing", "parallel-processing"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
@@ -25,7 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "docling>=2.70.0",
-    "pypdf>=6.6.0",
+    "pypdf>=6.9.2",
 ]
 
 
